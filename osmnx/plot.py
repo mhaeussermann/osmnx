@@ -165,6 +165,57 @@ def get_edge_colors_by_attr(
     vals = pd.Series(nx.get_edge_attributes(G, attr))
     return _get_colors_by_value(vals, num_bins, cmap, start, stop, na_color, equal_size)
 
+def get_edge_color_gradients(
+    G: nx.MultiDiGraph,
+    node_attr: str,
+    cmap: str = "viridis",
+    start: float = 0,
+    stop: float = 1,
+    alpha: float | None = None
+) -> list[str]:
+    """
+    Return colors for edges based on gradients of node attribute values.
+
+    Parameters
+    ----------
+    G
+        Input graph.
+    node_attr
+        Name of a node attribute with numerical values.
+    cmap
+        Name of the matplotlib colormap from which to choose the colors.
+    start
+        Where to start in the colorspace (from 0 to 1).
+    stop
+        Where to end in the colorspace (from 0 to 1).
+    alpha
+        If `None`, return colors as HTML-like hex triplet "#rrggbb" RGB
+        strings. If `float`, return as "#rrggbbaa" RGBa strings.
+
+    Returns
+    -------
+    edge_colors
+        List of colors as hex strings for each edge.
+    """
+    _verify_mpl()
+
+    # Get node attribute values
+    node_vals = pd.Series(nx.get_node_attributes(G, node_attr))
+
+    # Normalize node values to [0, 1]
+    norm = colors.Normalize(vmin=node_vals.min(), vmax=node_vals.max())
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+
+    edge_colors = []
+
+    for u, v, k in G.edges(keys=True):
+        u_val = node_vals[u]
+        v_val = node_vals[v]
+        avg_val = (u_val + v_val) / 2
+        color = sm.to_rgba(avg_val, alpha=alpha)
+        edge_colors.append(colors.to_hex(color, keep_alpha=alpha is not None))
+
+    return edge_colors
 
 def plot_graph(  # noqa: PLR0913
     G: nx.MultiGraph | nx.MultiDiGraph,
@@ -180,6 +231,8 @@ def plot_graph(  # noqa: PLR0913
     edge_color: str | Iterable[str] = "#999999",
     edge_linewidth: float | Sequence[float] = 1,
     edge_alpha: float | None = None,
+    edge_color_by_node_attr: str | None = None,  # New parameter
+    cmap: str = "viridis",  # New parameter
     bbox: tuple[float, float, float, float] | None = None,
     show: bool = True,
     close: bool = False,
@@ -219,6 +272,10 @@ def plot_graph(  # noqa: PLR0913
     edge_alpha
         Opacity of the edges. If you passed RGBa values to `edge_color`, set
         `edge_alpha=None` to use the alpha channel in `edge_color`.
+    edge_color_by_node_attr
+        If not None, color edges based on gradient of this node attribute.
+    cmap
+        Colormap to use for gradient coloring.
     bbox
         Bounding box as `(left, bottom, right, top)`. If None, calculate it
         from spatial extents of plotted geometries.
@@ -249,6 +306,9 @@ def plot_graph(  # noqa: PLR0913
     msg = "Begin plotting the graph..."
     utils.log(msg, level=lg.INFO)
     fig, ax = _get_fig_ax(ax=ax, figsize=figsize, bgcolor=bgcolor, polar=False)
+
+    if edge_color_by_node_attr:
+        edge_color = get_edge_color_gradients(G, edge_color_by_node_attr, cmap=cmap)
 
     if max_edge_lw > 0:
         # plot the edges' geometries
