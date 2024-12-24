@@ -217,6 +217,61 @@ def get_edge_color_gradients(
 
     return edge_colors
 
+def get_edge_colors_by_centrality(
+    G: nx.Graph,
+    centrality_type: str = "betweenness",
+    cmap: str = "coolwarm",
+    alpha: float | None = None,
+) -> list[str]:
+    """
+    Return colors for edges based on centrality values.
+
+    Parameters
+    ----------
+    G
+        Input graph.
+    centrality_type
+        The type of centrality to calculate. Options are "betweenness",
+        "closeness", "degree", "eigenvector". Default is "betweenness".
+    cmap
+        Name of the matplotlib colormap from which to choose the colors.
+    alpha
+        If `None`, return colors as HTML-like hex triplet "#rrggbb" RGB
+        strings. If `float`, return as "#rrggbbaa" RGBa strings.
+
+    Returns
+    -------
+    edge_colors
+        List of colors as hex strings for each edge.
+    """
+    _verify_mpl()
+
+    # Calculate centrality
+    if centrality_type == "betweenness":
+        centrality = nx.edge_betweenness_centrality(G)
+    elif centrality_type == "closeness":
+        centrality = {e: nx.closeness_centrality(G, u=e[0]) for e in G.edges}
+    elif centrality_type == "degree":
+        centrality = {e: G.degree(e[0]) + G.degree(e[1]) for e in G.edges}
+    elif centrality_type == "eigenvector":
+        eig_centrality = nx.eigenvector_centrality(G)
+        centrality = {e: eig_centrality[e[0]] + eig_centrality[e[1]] for e in G.edges}
+    else:
+        raise ValueError(f"Unsupported centrality type: {centrality_type}")
+
+    # Normalize centrality values
+    centrality_values = np.array(list(centrality.values()))
+    norm = colors.Normalize(vmin=centrality_values.min(), vmax=centrality_values.max())
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+
+    # Get colors
+    edge_colors = []
+    for e in G.edges:
+        color = sm.to_rgba(centrality[e], alpha=alpha)
+        edge_colors.append(colors.to_hex(color, keep_alpha=alpha is not None))
+
+    return edge_colors
+
 def plot_graph(  # noqa: PLR0913
     G: nx.MultiGraph | nx.MultiDiGraph,
     *,
